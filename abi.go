@@ -46,7 +46,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
 
-const pluginVersion = "1.0.0"
+const pluginVersion = "1.0.1"
 
 var state runtimeState
 
@@ -170,10 +170,11 @@ func pluginRegistration() registration {
 	return registration{
 		SchemaVersion: pluginabi.SchemaVersion,
 		Metadata: pluginapi.Metadata{
-			Name:             "Models Cache Override",
+			Name:             "模型目录覆写",
 			Version:          pluginVersion,
-			Author:           "local",
-			GitHubRepository: "https://github.com/router-for-me/CLIProxyAPI",
+			Author:           "moxi000",
+			GitHubRepository: "https://github.com/moxi000/models-cache-override",
+			Logo:             "https://github.com/moxi000.png",
 			ConfigFields: []pluginapi.ConfigField{
 				{Name: "match-base", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Also match provider-prefixed slugs, such as openai/gpt-5.5 against gpt-5.5."},
 			},
