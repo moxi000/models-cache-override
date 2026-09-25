@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
 
 //go:embed web/index.html
@@ -29,7 +27,7 @@ func managementRegistration() map[string]any {
 }
 
 func handleManagement(raw []byte) ([]byte, error) {
-	var req pluginapi.ManagementRequest
+	var req managementRequest
 	if len(raw) > 0 {
 		if errDecode := json.Unmarshal(raw, &req); errDecode != nil {
 			return nil, errDecode
@@ -40,7 +38,7 @@ func handleManagement(raw []byte) ([]byte, error) {
 		if req.Method != http.MethodGet {
 			return managementJSON(http.StatusMethodNotAllowed, map[string]string{"error": "method"})
 		}
-		return okEnvelope(pluginapi.ManagementResponse{
+		return okEnvelope(managementResponse{
 			StatusCode: http.StatusOK,
 			Headers:    http.Header{"Content-Type": {"text/html; charset=utf-8"}, "Cache-Control": {"no-store"}},
 			Body:       dashboard,
@@ -106,7 +104,7 @@ func managementJSON(status int, payload any) ([]byte, error) {
 	if errMarshal != nil {
 		return nil, errMarshal
 	}
-	return okEnvelope(pluginapi.ManagementResponse{
+	return okEnvelope(managementResponse{
 		StatusCode: status,
 		Headers:    http.Header{"Content-Type": {"application/json; charset=utf-8"}, "Cache-Control": {"no-store"}},
 		Body:       body,

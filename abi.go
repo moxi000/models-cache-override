@@ -41,9 +41,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"unsafe"
-
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
 
 const pluginVersion = "1.0.2"
@@ -67,7 +64,7 @@ type lifecycleRequest struct {
 
 type registration struct {
 	SchemaVersion uint32                 `json:"schema_version"`
-	Metadata      pluginapi.Metadata     `json:"metadata"`
+	Metadata      pluginMetadata         `json:"metadata"`
 	Capabilities  registrationCapability `json:"capabilities"`
 }
 
@@ -76,10 +73,7 @@ type registrationCapability struct {
 	ManagementAPI       bool `json:"management_api"`
 }
 
-type interceptRequest struct {
-	pluginapi.ResponseInterceptRequest
-	HostCallbackID string `json:"host_callback_id,omitempty"`
-}
+type interceptRequest = responseInterceptRequest
 
 func main() {}
 
@@ -89,7 +83,7 @@ func cliproxy_plugin_init(host *C.cliproxy_host_api, plugin *C.cliproxy_plugin_a
 		return 1
 	}
 	C.store_host_api(host)
-	plugin.abi_version = C.uint32_t(pluginabi.ABIVersion)
+	plugin.abi_version = C.uint32_t(abiVersion)
 	plugin.call = C.cliproxy_plugin_call_fn(C.cliproxyPluginCall)
 	plugin.free_buffer = C.cliproxy_plugin_free_fn(C.cliproxyPluginFree)
 	plugin.shutdown = C.cliproxy_plugin_shutdown_fn(C.cliproxyPluginShutdown)
@@ -131,7 +125,7 @@ func cliproxyPluginShutdown() {}
 
 func handleMethod(method string, request []byte) ([]byte, error) {
 	switch method {
-	case pluginabi.MethodPluginRegister, pluginabi.MethodPluginReconfigure:
+	case methodPluginRegister, methodPluginReconfigure:
 		if errConfigure := configureFromLifecycle(request); errConfigure != nil {
 			return nil, errConfigure
 		}
@@ -143,13 +137,13 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 		}
 		_ = count
 		return okEnvelope(pluginRegistration())
-	case pluginabi.MethodPluginQuiesce, pluginabi.MethodPluginShutdown:
+	case methodPluginQuiesce, methodPluginShutdown:
 		return okEnvelope(map[string]any{})
-	case pluginabi.MethodResponseInterceptAfter:
+	case methodResponseIntercept:
 		return interceptResponse(request)
-	case pluginabi.MethodManagementRegister:
+	case methodManagementRegister:
 		return okEnvelope(managementRegistration())
-	case pluginabi.MethodManagementHandle:
+	case methodManagementHandle:
 		return handleManagement(request)
 	default:
 		return errorEnvelope("unknown_method", "unknown method: "+method), nil
@@ -168,15 +162,15 @@ func configureFromLifecycle(raw []byte) error {
 
 func pluginRegistration() registration {
 	return registration{
-		SchemaVersion: pluginabi.SchemaVersion,
-		Metadata: pluginapi.Metadata{
+		SchemaVersion: schemaVersion,
+		Metadata: pluginMetadata{
 			Name:             "Models Cache Override",
 			Version:          pluginVersion,
 			Author:           "moxi000",
 			GitHubRepository: "https://github.com/moxi000/models-cache-override",
 			Logo:             "https://raw.githubusercontent.com/moxi000/models-cache-override/main/logo.png",
-			ConfigFields: []pluginapi.ConfigField{
-				{Name: "match-base", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Also match provider-prefixed slugs, such as openai/gpt-5.5 against gpt-5.5."},
+			ConfigFields: []configField{
+				{Name: "match-base", Type: configFieldTypeBoolean, Description: "Also match provider-prefixed slugs, such as openai/gpt-5.5 against gpt-5.5."},
 			},
 		},
 		Capabilities: registrationCapability{ResponseInterceptor: true, ManagementAPI: true},
@@ -192,9 +186,9 @@ func interceptResponse(raw []byte) ([]byte, error) {
 	}
 	rewritten, ok := state.applyTo(req.Body)
 	if !ok {
-		return okEnvelope(pluginapi.ResponseInterceptResponse{})
+		return okEnvelope(responseInterceptResponse{})
 	}
-	return okEnvelope(pluginapi.ResponseInterceptResponse{Body: rewritten})
+	return okEnvelope(responseInterceptResponse{Body: rewritten})
 }
 
 func hostHTTP(sourceURL string) ([]byte, error) {
@@ -202,7 +196,7 @@ func hostHTTP(sourceURL string) ([]byte, error) {
 	if errMarshal != nil {
 		return nil, errMarshal
 	}
-	raw, errCall := callHost(pluginabi.MethodHostHTTPDo, payload)
+	raw, errCall := callHost(methodHostHTTPDo, payload)
 	if errCall != nil {
 		return nil, errCall
 	}
@@ -271,7 +265,7 @@ func hostLog(level, message, detail string) {
 	if errMarshal != nil {
 		return
 	}
-	cMethod := C.CString(pluginabi.MethodHostLog)
+	cMethod := C.CString(methodHostLog)
 	defer C.free(unsafe.Pointer(cMethod))
 	var requestPtr *C.uint8_t
 	if len(raw) > 0 {
