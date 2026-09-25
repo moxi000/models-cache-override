@@ -1,0 +1,23 @@
+{
+  "slug": "MiniMax-M2.7",
+  "display_name": "MiniMax-M2.7",
+  "description": "MiniMax-M2.7 is the M2.7 model for agentic coding. The published context window is 204,800 tokens, and thinking cannot be disabled.",
+  "context_window": 204800,
+  "max_context_window": 204800,
+  "input_modalities": ["text"],
+  "default_reasoning_level": "medium",
+  "supported_reasoning_levels": [
+    {
+      "effort": "low",
+      "description": "Faster responses. Thinking stays enabled."
+    },
+    {
+      "effort": "medium",
+      "description": "Balanced reasoning for everyday tasks."
+    },
+    {
+      "effort": "high",
+      "description": "Deeper reasoning for harder problems."
+    }
+  ]
+}

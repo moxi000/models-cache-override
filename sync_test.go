@@ -3,8 +3,50 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"testing"
 )
+
+func TestPublishedModelFilesDiffAgainstCapturedCatalog(t *testing.T) {
+	if os.Getenv("SYNC_LIVE") == "" {
+		t.Skip("set SYNC_LIVE=1 to fetch the published per-model files")
+	}
+	captured, err := os.ReadFile("/root/CLIPROXYAPI/logs/.plugins/models-cache-override/captured.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runtime runtimeState
+	runtime.captured = captured
+	for _, slug := range []string{"deepseek-v4.1-flash", "MiniMax-M3", "MiniMax-M2.7"} {
+		sourceURL, errURL := modelOverridesURL(slug)
+		if errURL != nil {
+			t.Fatal(errURL)
+		}
+		body, errFetch := fetchURL(sourceURL)
+		if errFetch != nil {
+			t.Fatalf("%s: %v", slug, errFetch)
+		}
+		preview, errPreview := runtime.previewRemoteOverrides(body, sourceURL)
+		if errPreview != nil {
+			t.Fatal(errPreview)
+		}
+		if len(preview.Ignored) != 0 {
+			t.Fatalf("%s ignored %#v", slug, preview.Ignored)
+		}
+		t.Logf("%s new=%d conflict=%d", slug, preview.New, preview.Conflict)
+		if slug == "MiniMax-M3" {
+			found := false
+			for _, item := range preview.Items {
+				if item.Path == "context_window" && bytes.Contains(item.Remote, []byte("1000000")) {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("MiniMax-M3 context_window override was not detected")
+			}
+		}
+	}
+}
 
 func TestModelOverridesURLIsPerSlug(t *testing.T) {
 	got, err := modelOverridesURL("deepseek-v4.1-flash")

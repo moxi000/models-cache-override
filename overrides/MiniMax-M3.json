@@ -1,0 +1,28 @@
+{
+  "slug": "MiniMax-M3",
+  "display_name": "MiniMax M3",
+  "description": "MiniMax M3 is the latest M-series model for agentic reasoning, tool use, coding, and long-context work. It accepts text and image input, and its published context window is 1,000,000 tokens. Thinking is adaptive by default and can be turned off.",
+  "context_window": 1000000,
+  "max_context_window": 1000000,
+  "input_modalities": ["text", "image"],
+  "supports_image_detail_original": true,
+  "default_reasoning_level": "high",
+  "supported_reasoning_levels": [
+    {
+      "effort": "none",
+      "description": "Thinking disabled. The model answers directly."
+    },
+    {
+      "effort": "low",
+      "description": "Faster responses with lighter adaptive reasoning."
+    },
+    {
+      "effort": "high",
+      "description": "Adaptive thinking. This is the published default for MiniMax-M3."
+    },
+    {
+      "effort": "max",
+      "description": "Maximum reasoning depth for the hardest problems."
+    }
+  ]
+}
