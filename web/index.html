@@ -23,6 +23,7 @@
     .upstream{font-size:12px;color:var(--warn);margin-top:4px}.wide{grid-column:1/-1}
     .switch{display:inline-flex}.switch button{border-radius:0}.switch button:first-child{border-radius:7px 0 0 7px}.switch button:last-child{border-radius:0 7px 7px 0;margin-left:-1px}.switch button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
     #json{width:100%;min-height:68vh;border:0;padding:16px;resize:vertical;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}
+    .fields>label.field{display:flex;gap:12px;align-items:flex-start}.diff-name{font-weight:650}.diff-change{color:var(--muted);margin-top:4px}
     .status{color:var(--muted);font-size:12px;margin-top:10px}@media(max-width:800px){.layout{grid-template-columns:1fr}.row{grid-template-columns:1fr}}
   </style>
 </head>
@@ -49,7 +50,7 @@ const prefix = location.pathname.split('/v0/resource/plugins/')[0];
 const api = prefix + '/v0/management/models-cache-override/document';
 const el = id => document.getElementById(id);
 const labels = {display_name:'显示名',description:'描述',default_reasoning_level:'默认推理等级',supported_reasoning_levels:'支持的推理等级',input_modalities:'输入类型',context_window:'上下文',max_context_window:'最大上下文',base_instructions:'基础说明',model_messages:'模型说明',instructions_template:'说明模板',instructions_variables:'说明变量',visibility:'可见性',priority:'排序',shell_type:'终端类型',slug:'标识'};
-let data = {models:[],removed:[]}, current = null, draft = null, viewMode = 'form';
+let data = {models:[],removed:[]}, current = null, draft = null, viewMode = 'form', reviewSlug = '';
 function storedValue(name){
   let value = localStorage.getItem(name);
   if (value === null) return null;
@@ -351,10 +352,13 @@ el('refresh').onclick = async () => {
 };
 function showText(value){
   if (value == null) return '空';
+  if (Array.isArray(value) && value.every(item => item && typeof item === 'object' && item.effort)) return value.map(item => item.effort).join('、');
+  if (Array.isArray(value) && value.every(item => typeof item === 'string')) return value.join('、');
   const text = typeof value === 'string' ? value : JSON.stringify(value);
-  return text.length > 80 ? text.slice(0, 80) + '…' : text;
+  return text.length > 72 ? text.slice(0, 72) + '…' : text;
 }
 function renderReview(preview){
+  reviewSlug = (preview.items && preview.items[0] && preview.items[0].slug) || reviewSlug;
   current = null; draft = null;
   el('title').textContent = '仓库配置差异';
   el('badge').textContent = '新增 ' + preview.new + ' · 冲突 ' + preview.conflict;
@@ -390,12 +394,25 @@ function renderReview(preview){
     box.type = 'checkbox';
     box.checked = item.kind === 'new';
     box.dataset.id = item.id;
+    const body = document.createElement('div');
     const title = document.createElement('div');
-    title.textContent = (item.kind === 'conflict' ? '冲突' : '新覆写') + ' · ' + item.slug + ' · ' + item.path;
+    title.className = 'diff-name';
+    const name = document.createElement('span');
+    name.textContent = labels[item.path] || item.path;
+    const kind = document.createElement('span');
+    kind.className = 'badge ' + (item.kind === 'conflict' ? 'patched' : '');
+    kind.textContent = item.kind === 'conflict' ? '冲突' : '新覆写';
+    title.append(name, kind);
     const detail = document.createElement('div');
-    detail.className = 'sub';
-    detail.textContent = '上游 ' + showText(item.upstream) + ' → 本机 ' + showText(item.local) + ' → 仓库 ' + showText(item.remote);
-    row.append(box, title, detail);
+    detail.className = 'diff-change';
+    const localSame = JSON.stringify(item.local) === JSON.stringify(item.upstream);
+    if (item.kind === 'conflict' && !localSame) {
+      detail.textContent = '本机 ' + showText(item.local) + '    仓库 ' + showText(item.remote);
+    } else {
+      detail.textContent = showText(item.upstream) + '  →  ' + showText(item.remote);
+    }
+    body.append(title, detail);
+    row.append(box, body);
     root.append(row);
   }
   const apply = document.createElement('button');
@@ -405,18 +422,21 @@ function renderReview(preview){
   apply.style.margin = '16px 18px';
   apply.onclick = async () => {
     const ids = [...root.querySelectorAll('input[type=checkbox]:checked')].map(node => node.dataset.id);
+    const slug = reviewSlug;
     el('message').textContent = '正在写入…';
     try {
       data = await call(api.replace('/document','/sync/apply'), {method:'POST', headers:headers(), body:JSON.stringify({ids})});
-      el('message').textContent = '已按你的选择更新本机覆写。';
       renderList();
-      el('fields').replaceChildren();
+      const removed = (data.removed || []).some(model => model.slug === slug);
+      show(slug, removed);
+      el('message').textContent = '已写入 ' + slug + '，回到模型页面。';
     } catch (error) { el('message').textContent = error.message; }
   };
   root.append(apply);
 }
 el('sync').onclick = async () => {
   if (!current || !current.slug) { el('message').textContent = '请先在左侧选择一个模型。'; return; }
+  reviewSlug = current.slug;
   el('message').textContent = '正在读取 ' + current.slug + '.json …';
   try {
     const preview = await call(api.replace('/document','/sync'), {method:'POST', headers:headers(), body:JSON.stringify({slug: current.slug})});

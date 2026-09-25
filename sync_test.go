@@ -48,6 +48,18 @@ func TestPublishedModelFilesDiffAgainstCapturedCatalog(t *testing.T) {
 	}
 }
 
+func TestSyncIgnoresEquivalentJSON(t *testing.T) {
+	var runtime runtimeState
+	runtime.captured = []byte(`{"models":[{"slug":"m","input_modalities":["text","image"]}]}`)
+	preview, err := runtime.previewRemoteOverrides([]byte(`{"models":[{"slug":"m","input_modalities":["text", "image"]}]}`), "mem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.Items) != 0 {
+		t.Fatalf("equivalent modalities were reported: %#v", preview.Items)
+	}
+}
+
 func TestModelOverridesURLIsPerSlug(t *testing.T) {
 	got, err := modelOverridesURL("deepseek-v4.1-flash")
 	if err != nil {

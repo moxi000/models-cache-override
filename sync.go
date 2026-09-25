@@ -90,13 +90,16 @@ func (s *runtimeState) previewRemoteOverrides(raw []byte, sourceURL string) (syn
 			if !localSet {
 				localValue = upstreamValue
 			}
-			if rawEqual(remoteValue, localValue) {
+			if sameJSON(remoteValue, localValue) || sameJSON(remoteValue, upstreamValue) && !localSet {
+				continue
+			}
+			if sameJSON(remoteValue, upstreamValue) && sameJSON(localValue, upstreamValue) {
 				continue
 			}
 			kind := "new"
-			if localSet && !rawEqual(localValue, upstreamValue) && !rawEqual(localValue, remoteValue) {
+			if localSet && !sameJSON(localValue, upstreamValue) && !sameJSON(localValue, remoteValue) {
 				kind = "conflict"
-			} else if localSet && rawEqual(remoteValue, upstreamValue) && !rawEqual(localValue, upstreamValue) {
+			} else if localSet && sameJSON(remoteValue, upstreamValue) && !sameJSON(localValue, upstreamValue) {
 				kind = "conflict"
 			}
 			if kind == "new" {
@@ -247,6 +250,29 @@ func setDotted(obj *orderedObject, path string, value json.RawMessage) {
 	}
 	setDotted(child, tail, value)
 	obj.set(head, child.marshal())
+}
+
+func sameJSON(left, right json.RawMessage) bool {
+	if rawEqual(left, right) {
+		return true
+	}
+	return canonicalJSON(left) == canonicalJSON(right)
+}
+
+func canonicalJSON(raw json.RawMessage) string {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return "null"
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return string(raw)
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return string(raw)
+	}
+	return string(encoded)
 }
 
 func cloneRaw(raw json.RawMessage) json.RawMessage {
