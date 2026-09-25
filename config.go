@@ -42,6 +42,7 @@ type runtimeState struct {
 	upstream    []byte
 	upstreamAt  time.Time
 	upstreamURL string
+	syncPreview syncPreview
 }
 
 func (s *runtimeState) configure(configYAML []byte) error {

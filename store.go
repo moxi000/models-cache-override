@@ -73,8 +73,24 @@ func (s *runtimeState) importLegacy(dir string) error {
 
 func (s *runtimeState) usePatches(saved savedPatches) error {
 	cfg := s.resolved()
+	kept := make([]json.RawMessage, 0, len(saved.Models))
+	for _, raw := range saved.Models {
+		obj, ok := asObject(raw)
+		if ok {
+			if insert, _ := obj.get("_insert"); bytes.Equal(bytes.TrimSpace(insert), []byte("true")) {
+				continue
+			}
+		}
+		kept = append(kept, raw)
+	}
+	saved.Models = kept
 	overrides := make([]compiledOverride, 0, len(saved.Models))
 	for i, raw := range saved.Models {
+		if obj, ok := asObject(raw); ok {
+			if insert, _ := obj.get("_insert"); bytes.Equal(bytes.TrimSpace(insert), []byte("true")) {
+				continue
+			}
+		}
 		ov, errCompile := compileOverride(raw, i, cfg.Mode)
 		if errCompile != nil {
 			return fmt.Errorf("patches.models[%d]: %w", i, errCompile)
@@ -290,7 +306,7 @@ func (s *runtimeState) compose(body []byte) []byte {
 	if rewritten, ok := rewriteCatalog(out, s.current()); ok {
 		out = rewritten
 	}
-	return s.appendMissingPatches(out)
+	return out
 }
 
 func (s *runtimeState) acceptPreview(preview []byte) error {
@@ -606,12 +622,7 @@ func (s *runtimeState) editModel(action, slug string, model json.RawMessage) err
 		upstream := indexModels(baseModels)[slug]
 		saved := s.dropSlug(slug, true)
 		if len(upstream) == 0 {
-			obj.delete("_mode")
-			obj.delete("_match")
-			obj.delete("_delete")
-			obj.set("_insert", json.RawMessage("true"))
-			saved.Models = append(saved.Models, obj.marshal())
-			return s.savePatches(saved)
+			return fmt.Errorf("上游目录没有 %s，不能追加不存在的模型", slug)
 		}
 		patch, errPatch := diffModel(upstream, obj.marshal())
 		if errPatch != nil {

@@ -17,11 +17,13 @@ func managementRegistration() map[string]any {
 			{"Method": "GET", "Path": "/models-cache-override/document"},
 			{"Method": "PUT", "Path": "/models-cache-override/document"},
 			{"Method": "POST", "Path": "/models-cache-override/refresh"},
+			{"Method": "POST", "Path": "/models-cache-override/sync"},
+			{"Method": "POST", "Path": "/models-cache-override/sync/apply"},
 		},
 		"resources": []map[string]string{{
 			"Path":        "/status",
 			"Menu":        "模型目录",
-			"Description": "查看即将下发的模型 JSON，并覆写或追加字段。",
+			"Description": "查看即将下发的模型目录，覆写已有模型，并从仓库同步共用配置。",
 		}},
 	}
 }
@@ -43,6 +45,29 @@ func handleManagement(raw []byte) ([]byte, error) {
 			Headers:    http.Header{"Content-Type": {"text/html; charset=utf-8"}, "Cache-Control": {"no-store"}},
 			Body:       dashboard,
 		})
+	case strings.HasSuffix(req.Path, "/sync/apply"):
+		if req.Method != http.MethodPost {
+			return managementJSON(http.StatusMethodNotAllowed, map[string]string{"error": "method"})
+		}
+		var body struct {
+			IDs []string `json:"ids"`
+		}
+		if errDecode := json.Unmarshal(req.Body, &body); errDecode != nil {
+			return managementJSON(http.StatusBadRequest, map[string]string{"error": "无法解析同步选择"})
+		}
+		if errApply := state.applyRemoteOverrides(body.IDs); errApply != nil {
+			return managementJSON(http.StatusBadRequest, map[string]string{"error": errApply.Error()})
+		}
+		return documentResponse()
+	case strings.HasSuffix(req.Path, "/sync"):
+		if req.Method != http.MethodPost {
+			return managementJSON(http.StatusMethodNotAllowed, map[string]string{"error": "method"})
+		}
+		preview, errSync := state.fetchRemoteOverrides()
+		if errSync != nil {
+			return managementJSON(http.StatusBadGateway, map[string]string{"error": errSync.Error()})
+		}
+		return managementJSON(http.StatusOK, preview)
 	case strings.HasSuffix(req.Path, "/refresh"):
 		if req.Method != http.MethodPost {
 			return managementJSON(http.StatusMethodNotAllowed, map[string]string{"error": "method"})
@@ -81,13 +106,14 @@ func documentResponse() ([]byte, error) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	payload := map[string]any{
-		"source":       source,
-		"captured_at":  formatTime(state.capturedAt),
-		"upstream_at":  formatTime(state.upstreamAt),
-		"upstream_url": state.upstreamURL,
-		"patch_count":  len(state.patches.Models),
-		"models":       models,
-		"removed":      removed,
+		"source":        source,
+		"captured_at":   formatTime(state.capturedAt),
+		"upstream_at":   formatTime(state.upstreamAt),
+		"upstream_url":  state.upstreamURL,
+		"patch_count":   len(state.patches.Models),
+		"overrides_url": defaultOverridesURL,
+		"models":        models,
+		"removed":       removed,
 	}
 	return managementJSON(http.StatusOK, payload)
 }
