@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            goos: darwin
+            goarch: arm64
+            extension: dylib
+          - runner: macos-15-intel
+            goos: darwin
+            goarch: amd64
+            extension: dylib
+          - runner: ubuntu-24.04
+            goos: linux
+            goarch: amd64
+            extension: so
+          - runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            extension: so
+          - runner: windows-2025
+            goos: windows
+            goarch: amd64
+            extension: dll
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate release tag
+        run: |
+          test "$GITHUB_REF_TYPE" = tag
+          printf '%s\n' "$GITHUB_REF_NAME" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          version="${GITHUB_REF_NAME#v}"
+          grep -Eq "pluginVersion[[:space:]]*=[[:space:]]*\"${version}\"" abi.go
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.0"
+
+      - name: Install MinGW
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install mingw -y
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build native plugin
+        env:
+          CGO_ENABLED: "1"
+          GOARCH: ${{ matrix.goarch }}
+          GOOS: ${{ matrix.goos }}
+        run: |
+          mkdir -p dist/stage
+          go build -trimpath -buildmode=c-shared \
+            -o dist/stage/models-cache-override.${{ matrix.extension }} .
+          rm -f dist/stage/models-cache-override.h
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/stage/models-cache-override.${{ matrix.extension }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: staging
+
+      - name: Package platform libraries
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          for platform in darwin-arm64 darwin-amd64 linux-amd64 linux-arm64 windows-amd64; do
+            goos="${platform%-*}"
+            goarch="${platform#*-}"
+            case "$goos" in
+              darwin) extension=dylib ;;
+              linux) extension=so ;;
+              windows) extension=dll ;;
+            esac
+            library="models-cache-override.${extension}"
+            source="staging/release-${platform}/${library}"
+            archive="models-cache-override_${version}_${goos}_${goarch}.zip"
+            test -f "$source"
+            (
+              cd "staging/release-${platform}"
+              zip -q "${GITHUB_WORKSPACE}/dist/${archive}" "$library"
+            )
+            test "$(unzip -Z1 "dist/${archive}")" = "$library"
+          done
+          test "$(find dist -maxdepth 1 -name '*.zip' -type f | wc -l | tr -d ' ')" = 5
+
+      - name: Create checksums
+        run: |
+          (
+            cd dist
+            sha256sum models-cache-override_*.zip > checksums.txt
+            sha256sum -c checksums.txt
+          )
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/models-cache-override_*.zip
+            dist/checksums.txt
