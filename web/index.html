@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>模型目录</title>
+  <style>
+    :root{color-scheme:light;--bg:#faf9f5;--card:#fff;--text:#2d2a26;--muted:#6d6760;--line:#e5e5e5;--accent:#383a34;--ok:#35654c;--warn:#895923;--danger:#9c4439}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,"Segoe UI","Microsoft YaHei",sans-serif}
+    main{max-width:1280px;margin:auto;padding:24px 18px 40px}h1{font-size:24px;margin:4px 0}p{margin:0;color:var(--muted)}
+    button{font:inherit;border:1px solid #817b73;background:#fff;border-radius:7px;padding:7px 12px;cursor:pointer}button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .rules{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:14px 0;color:var(--muted);font-size:13px}.rules b{color:var(--text)}
+    .layout{display:grid;grid-template-columns:280px 1fr;gap:16px}.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+    .list{max-height:76vh;overflow:auto}.item{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;background:#fff;padding:12px 14px}.item.active{background:#f3f1ea}
+    .slug{font-weight:650}.sub{color:var(--muted);font-size:12px}.badge{display:inline-block;margin-left:6px;font-size:11px;padding:1px 6px;border-radius:5px;background:#eeefec}.badge.patched{background:#f5ecdf;color:var(--warn)}.badge.appended{background:#eaf2ed;color:var(--ok)}.badge.removed{background:#f8eeeb;color:var(--danger)}
+    .bar{display:flex;gap:8px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}.fields{max-height:70vh;overflow:auto;padding:8px 0 18px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;padding:16px 18px}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input[type=text],input[type=number],textarea,select{width:100%;border:1px solid #d9d4cc;border-radius:8px;padding:8px 10px;font:inherit;background:#fff;color:inherit}textarea{min-height:120px;font:13px/1.5 inherit}
+    input[type=checkbox]{width:auto;accent-color:var(--accent)}
+    .flags{display:flex;flex-wrap:wrap;gap:8px;padding:0 18px 16px}.flag{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 10px;font-size:13px}
+    .levels{padding:0 18px 8px}.level{display:grid;grid-template-columns:120px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+    details.extra{border-top:1px solid var(--line)}details.extra>summary{cursor:pointer;padding:12px 18px;font-weight:650}details.extra .grid{padding-top:0}
+    .upstream{font-size:12px;color:var(--warn);margin-top:4px}.wide{grid-column:1/-1}
+    .switch{display:inline-flex}.switch button{border-radius:0}.switch button:first-child{border-radius:7px 0 0 7px}.switch button:last-child{border-radius:0 7px 7px 0;margin-left:-1px}.switch button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+    #json{width:100%;min-height:68vh;border:0;padding:16px;resize:vertical;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}
+    .status{color:var(--muted);font-size:12px;margin-top:10px}@media(max-width:800px){.layout{grid-template-columns:1fr}.row{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <div class="sub">CPA / MODELS CACHE</div>
+  <header style="display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap">
+    <h1>模型目录</h1>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button id="refresh" type="button">拉取上游目录</button><button id="add" type="button">追加模型</button><button id="reset-all" type="button">重置全部覆写</button></div>
+  </header>
+  <div class="rules">上游目录更新后，<b>没改过的字段自动采用新值</b>。你改过的字段继续用你的值，直到点「恢复此项」或「重置此模型」。追加的模型会保留；你移除的模型即使上游还在也不会下发。</div>
+  <p id="source"></p>
+  <div class="layout" style="margin-top:14px">
+    <section class="panel list" id="list"></section>
+    <section class="panel">
+      <div class="bar"><strong id="title">选择一个模型</strong><span id="badge"></span><span class="switch"><button id="mode-form" class="on" type="button">表单</button><button id="mode-json" type="button">JSON</button></span><span style="flex:1"></span><button id="restore-model" type="button">重置此模型</button><button id="remove" type="button">不再下发</button><button id="save" class="primary" type="button">保存此模型</button></div>
+      <div class="fields" id="fields"></div>
+    </section>
+  </div>
+  <p class="status" id="message"></p>
+</main>
+<script>
+const prefix = location.pathname.split('/v0/resource/plugins/')[0];
+const api = prefix + '/v0/management/models-cache-override/document';
+const el = id => document.getElementById(id);
+const labels = {display_name:'显示名',description:'描述',default_reasoning_level:'默认推理等级',supported_reasoning_levels:'支持的推理等级',input_modalities:'输入类型',context_window:'上下文',max_context_window:'最大上下文',base_instructions:'基础说明',model_messages:'模型说明',instructions_template:'说明模板',instructions_variables:'说明变量',visibility:'可见性',priority:'排序',shell_type:'终端类型',slug:'标识'};
+let data = {models:[],removed:[]}, current = null, draft = null, viewMode = 'form';
+function storedValue(name){
+  let value = localStorage.getItem(name);
+  if (value === null) return null;
+  let maskSource = null;
+  if (value.startsWith('enc::v2::')) maskSource = 'cli-proxy-api-webui::secure-storage|v2|' + location.host;
+  else if (value.startsWith('enc::v1::')) maskSource = 'cli-proxy-api-webui::secure-storage|' + location.host + '|' + navigator.userAgent;
+  if (maskSource) {
+    const mask = new TextEncoder().encode(maskSource);
+    const bytes = Uint8Array.from(atob(value.slice(9)), (c, i) => c.charCodeAt(0) ^ mask[i % mask.length]);
+    value = new TextDecoder('utf-8', {fatal:true}).decode(bytes);
+  }
+  try { return JSON.parse(value); } catch { return value; }
+}
+function managementKey(){
+  try {
+    if (localStorage.getItem('isLoggedIn') !== 'true') return '';
+    const state = storedValue('cli-proxy-auth')?.state;
+    const key = state ? state.managementKey : storedValue('managementKey');
+    return typeof key === 'string' ? key.trim() : '';
+  } catch { return ''; }
+}
+function headers(){ return {Authorization:'Bearer '+managementKey(), 'Content-Type':'application/json'}; }
+async function call(url, options){
+  const response = await fetch(url, options);
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || ('请求失败 ' + response.status));
+  return body;
+}
+async function load(){
+  data = await call(api, {headers: headers(), cache:'no-store'});
+  const names = {captured:'CPA 最近一次实际下发', upstream:'已拉取的 CPA 目录', empty:'还没有目录'};
+  el('source').textContent = '底稿：' + (names[data.source] || data.source) + (data.captured_at ? ' · ' + data.captured_at : '') + ' · 覆写 ' + (data.patch_count || 0) + ' 条';
+  renderList();
+  if (current) show(current.slug, current.status === 'removed');
+}
+function renderList(){
+  const list = el('list');
+  list.replaceChildren();
+  const removed = data.removed || [];
+  const models = data.models || [];
+  if (removed.length) {
+    const note = document.createElement('div');
+    note.className = 'sub';
+    note.style.padding = '10px 14px';
+    note.textContent = '仍会下发';
+    list.append(note);
+  }
+  for (const model of models) list.append(modelButton(model));
+  if (removed.length) {
+    const note = document.createElement('div');
+    note.className = 'sub';
+    note.style.padding = '10px 14px';
+    note.textContent = '已不再下发';
+    list.append(note);
+    for (const model of removed) list.append(modelButton(model));
+  }
+}
+function modelButton(model){
+    const button = document.createElement('button');
+    button.className = 'item' + (current && current.slug === model.slug ? ' active' : '');
+    button.innerHTML = '<div class="slug"></div><div class="sub"></div>';
+    button.querySelector('.slug').textContent = model.display_name || model.slug;
+    button.querySelector('.sub').textContent = model.slug;
+    const badge = document.createElement('span');
+    badge.className = 'badge ' + model.status;
+    badge.textContent = {upstream:'跟随上游', patched:'有覆写', appended:'追加', removed:'已移除'}[model.status] || model.status;
+    button.querySelector('.slug').append(badge);
+  button.onclick = () => show(model.slug, model.status === 'removed');
+  return button;
+}
+function show(slug, removed){
+  const pool = removed ? data.removed : data.models;
+  current = (pool || []).find(model => model.slug === slug) || null;
+  draft = current && current.issued ? structuredClone(current.issued) : (current && current.upstream ? structuredClone(current.upstream) : null);
+  el('title').textContent = current ? (current.display_name || current.slug) : '选择一个模型';
+  el('badge').textContent = current ? ({upstream:'未改，整模跟随上游', patched:'改过的字段保持你的值', appended:'上游没有，按你的内容下发', removed:'已从下发中拿掉'}[current.status] || '') : '';
+  const removedNow = current && current.status === 'removed';
+  el('remove').hidden = !current || removedNow;
+  el('save').hidden = !current || removedNow;
+  el('restore-model').hidden = !current;
+  el('restore-model').textContent = removedNow ? '恢复下发' : '重置此模型';
+  renderFields();
+  renderList();
+}
+function patchedSet(){ return new Set((current && current.patched_paths) || []); }
+function upstreamAt(path){
+  let value = current && current.upstream;
+  for (const part of path) {
+    if (value == null) return undefined;
+    value = value[part];
+  }
+  return value;
+}
+const primaryKeys = ['display_name','description','visibility','context_window','max_context_window','default_reasoning_level','priority','shell_type'];
+const flagKeys = ['support_verbosity','supported_in_api','supports_parallel_tool_calls','supports_search_tool','supports_reasoning_summaries','supports_image_detail_original','prefer_websockets','use_responses_lite','include_skills_usage_instructions'];
+function applyJson(){
+  if (viewMode !== 'json') return true;
+  const box = el('json');
+  if (!box) return true;
+  try {
+    const parsed = JSON.parse(box.value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !parsed.slug) throw new Error('需要是带 slug 的模型对象');
+    draft = parsed;
+    return true;
+  } catch (error) {
+    el('message').textContent = 'JSON 无法解析：' + error.message;
+    return false;
+  }
+}
+function setMode(mode){
+  if (mode === viewMode) return;
+  if (mode === 'form' && !applyJson()) return;
+  viewMode = mode;
+  el('mode-form').classList.toggle('on', mode === 'form');
+  el('mode-json').classList.toggle('on', mode === 'json');
+  renderFields();
+}
+function renderFields(){
+  const root = el('fields');
+  root.replaceChildren();
+  if (!draft) { root.textContent = '左侧选择模型。'; return; }
+  if (viewMode === 'json') {
+    const box = document.createElement('textarea');
+    box.id = 'json';
+    box.spellcheck = false;
+    box.value = JSON.stringify(draft, null, 2);
+    root.append(box);
+    return;
+  }
+  if (current.status === 'removed') { root.textContent = '这个模型现在不会下发。点右上角「恢复下发」可以加回来。'; return; }
+  const patched = patchedSet();
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  for (const key of primaryKeys) if (key in draft) grid.append(scalarField([key], draft[key], patched, key === 'description'));
+  root.append(grid);
+  if (Array.isArray(draft.input_modalities)) root.append(modalityField(patched));
+  if (Array.isArray(draft.supported_reasoning_levels)) root.append(reasoningField(patched));
+  const flags = document.createElement('div');
+  flags.className = 'flags';
+  let anyFlag = false;
+  for (const key of flagKeys) if (typeof draft[key] === 'boolean') { anyFlag = true; flags.append(flagField(key, patched)); }
+  if (anyFlag) root.append(flags);
+  const used = new Set([...primaryKeys, ...flagKeys, 'input_modalities', 'supported_reasoning_levels', 'slug', 'base_instructions', 'model_messages']);
+  const extra = document.createElement('details');
+  extra.className = 'extra';
+  extra.innerHTML = '<summary>其他字段</summary>';
+  const extraGrid = document.createElement('div');
+  extraGrid.className = 'grid';
+  for (const key of Object.keys(draft)) {
+    if (used.has(key)) continue;
+    const value = draft[key];
+    if (value && typeof value === 'object') continue;
+    extraGrid.append(scalarField([key], value, patched, false));
+  }
+  extra.append(extraGrid);
+  root.append(extra);
+  const text = document.createElement('details');
+  text.className = 'extra';
+  text.innerHTML = '<summary>说明文本</summary>';
+  const textGrid = document.createElement('div');
+  textGrid.className = 'grid';
+  if ('base_instructions' in draft) textGrid.append(scalarField(['base_instructions'], draft.base_instructions, patched, true));
+  const template = draft.model_messages && draft.model_messages.instructions_template;
+  if (template != null) textGrid.append(scalarField(['model_messages','instructions_template'], template, patched, true));
+  text.append(textGrid);
+  root.append(text);
+}
+function scalarField(path, value, patched, wide){
+  const wrap = document.createElement('div');
+  wrap.className = 'field' + (wide || (typeof value === 'string' && value.length > 80) ? ' wide' : '');
+  const name = document.createElement('label');
+  name.textContent = label(path);
+  wrap.append(name);
+  let input;
+  if (typeof value === 'number') {
+    input = document.createElement('input'); input.type = 'number'; input.value = String(value);
+    input.onchange = () => setDraft(path, Number(input.value));
+  } else if (value == null) {
+    input = document.createElement('input'); input.type = 'text'; input.placeholder = '空'; input.value = '';
+    input.onchange = () => setDraft(path, input.value === '' ? null : input.value);
+  } else if (typeof value === 'string' && value.length > 80) {
+    input = document.createElement('textarea'); input.value = value;
+    input.onchange = () => setDraft(path, input.value);
+  } else {
+    input = document.createElement('input'); input.type = 'text'; input.value = value == null ? '' : String(value);
+    input.onchange = () => setDraft(path, input.value);
+  }
+  wrap.append(input);
+  markOverride(wrap, path, patched);
+  return wrap;
+}
+function flagField(key, patched){
+  const labelEl = document.createElement('label');
+  labelEl.className = 'flag';
+  const input = document.createElement('input');
+  input.type = 'checkbox'; input.checked = !!draft[key];
+  input.onchange = () => setDraft([key], input.checked);
+  labelEl.append(input, document.createTextNode(label([key])));
+  if (patched.has(key)) labelEl.append(document.createTextNode(' · 已改'));
+  return labelEl;
+}
+function modalityField(){
+  const wrap = document.createElement('div');
+  wrap.className = 'flags';
+  for (const name of ['text','image']) {
+    const labelEl = document.createElement('label');
+    labelEl.className = 'flag';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = draft.input_modalities.includes(name);
+    input.onchange = () => {
+      const set = new Set(draft.input_modalities);
+      if (input.checked) set.add(name); else set.delete(name);
+      draft.input_modalities = ['text','image'].filter(item => set.has(item));
+    };
+    labelEl.append(input, document.createTextNode(name === 'text' ? '文本输入' : '图片输入'));
+    wrap.append(labelEl);
+  }
+  return wrap;
+}
+function reasoningField(){
+  const wrap = document.createElement('div');
+  wrap.className = 'levels';
+  const title = document.createElement('label');
+  title.textContent = '推理等级';
+  title.style.cssText = 'display:block;color:var(--muted);font-size:12px;margin:4px 0 8px';
+  wrap.append(title);
+  draft.supported_reasoning_levels.forEach((level, index) => {
+    const row = document.createElement('div');
+    row.className = 'level';
+    const effort = document.createElement('input');
+    effort.type = 'text'; effort.value = level.effort || '';
+    effort.onchange = () => { level.effort = effort.value; };
+    const description = document.createElement('input');
+    description.type = 'text'; description.value = level.description || '';
+    description.onchange = () => { level.description = description.value; };
+    const remove = document.createElement('button');
+    remove.type = 'button'; remove.textContent = '删除';
+    remove.onclick = () => { draft.supported_reasoning_levels.splice(index, 1); renderFields(); };
+    row.append(effort, description, remove);
+    wrap.append(row);
+  });
+  const add = document.createElement('button');
+  add.type = 'button'; add.textContent = '添加等级';
+  add.onclick = () => { draft.supported_reasoning_levels.push({effort:'', description:''}); renderFields(); };
+  wrap.append(add);
+  return wrap;
+}
+function markOverride(wrap, path, patched){
+  if (!patched.has(path.join('.'))) return;
+  const note = document.createElement('div');
+  note.className = 'upstream';
+  const upstream = upstreamAt(path);
+  note.textContent = '上游：' + (upstream === undefined ? '无' : (typeof upstream === 'string' ? upstream.slice(0, 80) : JSON.stringify(upstream)));
+  const back = document.createElement('button');
+  back.type = 'button'; back.textContent = '恢复'; back.style.marginLeft = '8px';
+  back.onclick = () => { setDraft(path, upstream === undefined ? null : structuredClone(upstream)); renderFields(); };
+  note.append(back);
+  wrap.append(note);
+}
+function label(path){ const key = String(path[path.length - 1]); return labels[key] || key; }
+function setDraft(path, value){
+  let node = draft;
+  for (let i = 0; i < path.length - 1; i++) node = node[path[i]];
+  node[path[path.length - 1]] = value;
+}
+function deleteDraft(path){
+  let node = draft;
+  for (let i = 0; i < path.length - 1; i++) node = node[path[i]];
+  delete node[path[path.length - 1]];
+}
+async function save(){
+  if (!applyJson() || !draft) return;
+  el('message').textContent = '正在保存…';
+  try {
+    data = await call(api, {method:'PUT', headers:headers(), body:JSON.stringify({action: current.status === 'appended' ? 'append' : 'set-model', slug: draft.slug, model: draft})});
+    el('message').textContent = '已保存。未改字段会继续跟随上游。';
+    renderList(); show(draft.slug, false);
+  } catch (error) { el('message').textContent = error.message; }
+}
+async function act(action, slug){
+  data = await call(api, {method:'PUT', headers:headers(), body:JSON.stringify({action, slug})});
+  el('message').textContent = action === 'reset-all' ? '已清空全部覆写，下发恢复为上游。' : action === 'remove' ? slug + ' 已不再下发，留在左侧底部，可点「恢复下发」。' : action === 'reset-model' ? slug + ' 已恢复为上游内容，并重新下发。' : '已更新。';
+  renderList();
+  if (action === 'reset-all') { current = null; draft = null; el('fields').replaceChildren(); el('remove').hidden = true; el('save').hidden = true; el('restore-model').hidden = true; }
+  else show(slug, action === 'remove');
+}
+el('mode-form').onclick = () => setMode('form');
+el('mode-json').onclick = () => setMode('json');
+el('save').onclick = () => save().catch(error => { el('message').textContent = error.message; });
+el('restore-model').onclick = () => current && act('reset-model', current.slug).catch(error => { el('message').textContent = error.message; });
+el('remove').onclick = () => current && act('remove', current.slug).catch(error => { el('message').textContent = error.message; });
+el('reset-all').onclick = () => { if (confirm('清空全部覆写和追加，下发恢复成上游？')) act('reset-all', '').catch(error => { el('message').textContent = error.message; }); };
+el('refresh').onclick = async () => {
+  el('message').textContent = '正在拉取上游目录…';
+  try { data = await call(prefix + '/v0/management/models-cache-override/refresh', {method:'POST', headers:headers(), body:'{}'}); el('message').textContent = '已拉取。你的覆写还在，没改过的字段已换上新目录。'; renderList(); if (current) show(current.slug, current.status === 'removed'); }
+  catch (error) { el('message').textContent = error.message; }
+};
+el('add').onclick = () => {
+  const slug = prompt('新模型 slug');
+  if (!slug) return;
+  draft = {slug, display_name:slug, visibility:'list', supported_in_api:true};
+  current = {slug, status:'appended', display_name:slug, issued:draft, patched_paths:[], upstream:null};
+  renderFields();
+};
+load().catch(error => { el('message').textContent = error.message || '请先登录管理页'; });
+</script>
+</body>
+</html>
