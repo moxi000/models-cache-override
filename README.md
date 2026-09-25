@@ -8,16 +8,16 @@ CLIProxyAPI 插件。它在 Codex 客户端拿到 `models_cache` 之前，把你
 
 ## 商店源
 
-这是一个独立的 CPA 插件商店清单。在 `config.yaml` 里追加：
+本插件收录在独立商店仓库 [cpa-plugin-store](https://github.com/moxi000/cpa-plugin-store)。在 `config.yaml` 里追加：
 
 ```yaml
 plugins:
   enabled: true
   store-sources:
-    - "https://raw.githubusercontent.com/moxi000/models-cache-override/main/registry.json"
+    - "https://raw.githubusercontent.com/moxi000/cpa-plugin-store/main/registry.json"
 ```
 
-保存后，在管理面板的插件商店里选择这个源，即可找到并安装 **模型目录覆写**（插件 ID：`models-cache-override`）。
+保存后，在管理面板的插件商店里选择这个源，即可找到并安装 **模型目录覆写**（插件 ID：`models-cache-override`）。以后新增的插件也会放进同一个商店源。
 
 安装使用本仓库的 GitHub Release。发布包名称为：
 
