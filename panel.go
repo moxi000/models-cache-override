@@ -50,7 +50,8 @@ func handleManagement(raw []byte) ([]byte, error) {
 			return managementJSON(http.StatusMethodNotAllowed, map[string]string{"error": "method"})
 		}
 		var body struct {
-			IDs []string `json:"ids"`
+			Slug string   `json:"slug"`
+			IDs  []string `json:"ids"`
 		}
 		if errDecode := json.Unmarshal(req.Body, &body); errDecode != nil {
 			return managementJSON(http.StatusBadRequest, map[string]string{"error": "无法解析同步选择"})
@@ -63,7 +64,18 @@ func handleManagement(raw []byte) ([]byte, error) {
 		if req.Method != http.MethodPost {
 			return managementJSON(http.StatusMethodNotAllowed, map[string]string{"error": "method"})
 		}
-		preview, errSync := state.fetchRemoteOverrides()
+		var body struct {
+			Slug string `json:"slug"`
+		}
+		if len(req.Body) > 0 {
+			if errDecode := json.Unmarshal(req.Body, &body); errDecode != nil {
+				return managementJSON(http.StatusBadRequest, map[string]string{"error": "无法解析模型名"})
+			}
+		}
+		if strings.TrimSpace(body.Slug) == "" {
+			return managementJSON(http.StatusBadRequest, map[string]string{"error": "请先选择一个模型"})
+		}
+		preview, errSync := state.fetchRemoteOverrides(body.Slug)
 		if errSync != nil {
 			return managementJSON(http.StatusBadGateway, map[string]string{"error": errSync.Error()})
 		}
@@ -111,7 +123,7 @@ func documentResponse() ([]byte, error) {
 		"upstream_at":   formatTime(state.upstreamAt),
 		"upstream_url":  state.upstreamURL,
 		"patch_count":   len(state.patches.Models),
-		"overrides_url": defaultOverridesURL,
+		"overrides_url": overridesBaseURL,
 		"models":        models,
 		"removed":       removed,
 	}

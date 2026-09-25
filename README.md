@@ -4,13 +4,13 @@ CLIProxyAPI 插件。它在 Codex 客户端拿到 `models_cache` 之前，把你
 
 没改过的字段会跟随上游更新。改过的字段保持你的值，直到在管理页里恢复。只能覆写上游目录里已经存在的模型，不能追加上游没有的模型。
 
-共用覆写在仓库根目录的 `overrides.json`。管理页的「从 GitHub 拉取共用配置」会读取：
+共用覆写按模型拆开放在 `overrides/<模型 slug>.json`，一个文件只描述一个模型。例如：
 
 ```text
-https://raw.githubusercontent.com/moxi000/models-cache-override/main/overrides.json
+https://raw.githubusercontent.com/moxi000/models-cache-override/main/overrides/deepseek-v4.1-flash.json
 ```
 
-拉取后先列出新增项和冲突项。冲突默认不勾选，确认后才写入本机。修改共用参数时，直接向这个文件提 Pull Request。
+管理页先选中模型，再点「拉取此模型的 GitHub 配置」。拉取后只比较这一份，列出新增项和冲突项。冲突默认不勾选，确认后才写入本机。要改某个模型的共用参数，只对该文件提 Pull Request。
 
 管理页入口：`/v0/resource/plugins/models-cache-override/status`，或在管理面板的插件菜单里打开「模型目录」。
 

@@ -31,14 +31,14 @@
   <div class="sub">CPA / MODELS CACHE</div>
   <header style="display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap">
     <h1>模型目录</h1>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button id="refresh" type="button">拉取上游目录</button><button id="sync" type="button">从 GitHub 拉取共用配置</button><button id="reset-all" type="button">重置全部覆写</button></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button id="refresh" type="button">拉取上游目录</button><button id="reset-all" type="button">重置全部覆写</button></div>
   </header>
-  <div class="rules">只覆写<b>上游目录里已经有的模型</b>。没改过的字段跟随上游。仓库里的共用配置需要先看差异，勾选后才会写到本机。上游没有的模型会被忽略。</div>
+  <div class="rules">只覆写<b>上游目录里已经有的模型</b>。没改过的字段跟随上游。每个模型单独放在 GitHub 的 <b>overrides/模型名.json</b>。先选中模型，再拉取这一份，确认差异后才会写入本机。</div>
   <p id="source"></p>
   <div class="layout" style="margin-top:14px">
     <section class="panel list" id="list"></section>
     <section class="panel">
-      <div class="bar"><strong id="title">选择一个模型</strong><span id="badge"></span><span class="switch"><button id="mode-form" class="on" type="button">表单</button><button id="mode-json" type="button">JSON</button></span><span style="flex:1"></span><button id="restore-model" type="button">重置此模型</button><button id="remove" type="button">不再下发</button><button id="save" class="primary" type="button">保存此模型</button></div>
+      <div class="bar"><strong id="title">选择一个模型</strong><span id="badge"></span><span class="switch"><button id="mode-form" class="on" type="button">表单</button><button id="mode-json" type="button">JSON</button></span><span style="flex:1"></span><button id="restore-model" type="button">重置此模型</button><button id="sync" type="button">拉取此模型的 GitHub 配置</button><button id="remove" type="button">不再下发</button><button id="save" class="primary" type="button">保存此模型</button></div>
       <div class="fields" id="fields"></div>
     </section>
   </div>
@@ -127,6 +127,7 @@ function show(slug, removed){
   el('title').textContent = current ? (current.display_name || current.slug) : '选择一个模型';
   el('badge').textContent = current ? ({upstream:'未改，整模跟随上游', patched:'改过的字段保持你的值', appended:'上游没有，按你的内容下发', removed:'已从下发中拿掉'}[current.status] || '') : '';
   const removedNow = current && current.status === 'removed';
+  el('sync').hidden = !current;
   el('remove').hidden = !current || removedNow;
   el('save').hidden = !current || removedNow;
   el('restore-model').hidden = !current;
@@ -415,10 +416,11 @@ function renderReview(preview){
   root.append(apply);
 }
 el('sync').onclick = async () => {
-  el('message').textContent = '正在读取仓库配置…';
+  if (!current || !current.slug) { el('message').textContent = '请先在左侧选择一个模型。'; return; }
+  el('message').textContent = '正在读取 ' + current.slug + '.json …';
   try {
-    const preview = await call(api.replace('/document','/sync'), {method:'POST', headers:headers(), body:'{}'});
-    el('message').textContent = '请确认下面的差异。';
+    const preview = await call(api.replace('/document','/sync'), {method:'POST', headers:headers(), body:JSON.stringify({slug: current.slug})});
+    el('message').textContent = '请确认 ' + current.slug + ' 的差异。';
     renderReview(preview);
   } catch (error) { el('message').textContent = error.message; }
 };

@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-const defaultOverridesURL = "https://raw.githubusercontent.com/moxi000/models-cache-override/main/overrides.json"
+const overridesBaseURL = "https://raw.githubusercontent.com/moxi000/models-cache-override/main/overrides"
 
 type syncItem struct {
 	ID       string          `json:"id"`
@@ -34,8 +34,29 @@ type syncPreview struct {
 	Conflict int           `json:"conflict"`
 }
 
+func modelOverridesURL(slug string) (string, error) {
+	slug = strings.TrimSpace(slug)
+	if slug == "" || strings.Contains(slug, "/") || strings.Contains(slug, `\`) || strings.Contains(slug, "..") {
+		return "", fmt.Errorf("无效的模型名")
+	}
+	return overridesBaseURL + "/" + strings.ReplaceAll(slug, " ", "%20") + ".json", nil
+}
+
+func parseOverrideFile(raw []byte) ([]json.RawMessage, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) > 0 && raw[0] == '{' {
+		obj, ok := asObject(raw)
+		if ok {
+			if _, hasModels := obj.get("models"); !hasModels && stringField(obj, "slug") != "" {
+				return []json.RawMessage{append(json.RawMessage(nil), raw...)}, nil
+			}
+		}
+	}
+	return parseModelDocument(raw)
+}
+
 func (s *runtimeState) previewRemoteOverrides(raw []byte, sourceURL string) (syncPreview, error) {
-	remoteModels, errParse := parseModelDocument(raw)
+	remoteModels, errParse := parseOverrideFile(raw)
 	if errParse != nil {
 		return syncPreview{}, fmt.Errorf("仓库配置: %w", errParse)
 	}
@@ -100,12 +121,16 @@ func (s *runtimeState) previewRemoteOverrides(raw []byte, sourceURL string) (syn
 	return preview, nil
 }
 
-func (s *runtimeState) fetchRemoteOverrides() (syncPreview, error) {
-	body, errFetch := fetchURL(defaultOverridesURL)
-	if errFetch != nil {
-		return syncPreview{}, errFetch
+func (s *runtimeState) fetchRemoteOverrides(slug string) (syncPreview, error) {
+	sourceURL, errURL := modelOverridesURL(slug)
+	if errURL != nil {
+		return syncPreview{}, errURL
 	}
-	return s.previewRemoteOverrides(body, defaultOverridesURL)
+	body, errFetch := fetchURL(sourceURL)
+	if errFetch != nil {
+		return syncPreview{}, fmt.Errorf("读取 %s 失败：%w", slug, errFetch)
+	}
+	return s.previewRemoteOverrides(body, sourceURL)
 }
 
 func (s *runtimeState) applyRemoteOverrides(ids []string) error {

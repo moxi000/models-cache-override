@@ -6,6 +6,23 @@ import (
 	"testing"
 )
 
+func TestModelOverridesURLIsPerSlug(t *testing.T) {
+	got, err := modelOverridesURL("deepseek-v4.1-flash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != overridesBaseURL+"/deepseek-v4.1-flash.json" {
+		t.Fatalf("url = %s", got)
+	}
+	if _, err := modelOverridesURL("../secret"); err == nil {
+		t.Fatal("path traversal was accepted")
+	}
+	models, err := parseOverrideFile([]byte(`{"slug":"m","display_name":"Mine"}`))
+	if err != nil || len(models) != 1 {
+		t.Fatalf("single model file = %d %v", len(models), err)
+	}
+}
+
 func TestSyncSkipsMissingModelAndAppliesChosenFields(t *testing.T) {
 	var runtime runtimeState
 	runtime.dir = t.TempDir()
