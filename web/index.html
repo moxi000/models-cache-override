@@ -19,12 +19,14 @@
     input[type=checkbox]{width:auto;accent-color:var(--accent)}
     .flags{display:flex;flex-wrap:wrap;gap:8px;padding:0 18px 16px}.flag{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 10px;font-size:13px}
     .levels{padding:0 18px 8px}.level{display:grid;grid-template-columns:120px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+    .tier{display:grid;grid-template-columns:140px 160px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+    .section-title{display:block;color:var(--muted);font-size:12px;margin:12px 0 8px}
     details.extra{border-top:1px solid var(--line)}details.extra>summary{cursor:pointer;padding:12px 18px;font-weight:650}details.extra .grid{padding-top:0}
     .upstream{font-size:12px;color:var(--warn);margin-top:4px}.wide{grid-column:1/-1}
     .switch{display:inline-flex}.switch button{border-radius:0}.switch button:first-child{border-radius:7px 0 0 7px}.switch button:last-child{border-radius:0 7px 7px 0;margin-left:-1px}.switch button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
     #json{width:100%;min-height:68vh;border:0;padding:16px;resize:vertical;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}
     .fields>label.field{display:flex;gap:12px;align-items:flex-start}.diff-name{font-weight:650}.diff-change{color:var(--muted);margin-top:4px}
-    .status{color:var(--muted);font-size:12px;margin-top:10px}@media(max-width:800px){.layout{grid-template-columns:1fr}.row{grid-template-columns:1fr}}
+    .status{color:var(--muted);font-size:12px;margin-top:10px}@media(max-width:800px){.layout{grid-template-columns:1fr}.row,.tier{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -49,7 +51,7 @@
 const prefix = location.pathname.split('/v0/resource/plugins/')[0];
 const api = prefix + '/v0/management/models-cache-override/document';
 const el = id => document.getElementById(id);
-const labels = {display_name:'显示名',description:'描述',default_reasoning_level:'默认推理等级',supported_reasoning_levels:'支持的推理等级',input_modalities:'输入类型',context_window:'上下文',max_context_window:'最大上下文',base_instructions:'基础说明',model_messages:'模型说明',instructions_template:'说明模板',instructions_variables:'说明变量',visibility:'可见性',priority:'排序',shell_type:'终端类型',slug:'标识'};
+const labels = {display_name:'显示名',description:'描述',default_reasoning_level:'默认推理等级',supported_reasoning_levels:'支持的推理等级',input_modalities:'输入类型',context_window:'上下文',max_context_window:'最大上下文',base_instructions:'基础说明',model_messages:'模型说明',instructions_template:'说明模板',instructions_variables:'说明变量',persistent_instructions:'常驻说明',visibility:'可见性',priority:'排序',shell_type:'终端类型',slug:'标识',additional_speed_tiers:'额外速度档',service_tiers:'服务档',default_service_tier:'默认服务档',available_access_programs:'可用权限计划',availability_nux:'上线提示',upgrade:'升级提示',include_skills_usage_instructions:'附带技能说明',include_plugin_usage_instructions:'附带插件说明',include_apps_usage_instructions:'附带应用说明',default_reasoning_summary:'默认推理摘要',support_verbosity:'支持详细程度',default_verbosity:'默认详细程度',apply_patch_tool_type:'补丁工具',web_search_tool_type:'搜索工具',truncation_policy:'截断策略',mode:'截断方式',limit:'截断上限',supports_image_detail_original:'原图细节',comp_hash:'压缩哈希',effective_context_window_percent:'有效上下文比例',experimental_supported_tools:'实验工具',supports_search_tool:'支持搜索',supports_experimental_context:'实验上下文',use_responses_lite:'Responses Lite',supports_reasoning_effort_updates:'允许改推理等级',node_repl_auto_review_required:'Node REPL 需审核',node_repl_disabled:'禁用 Node REPL',tool_mode:'工具模式',multi_agent_version:'多智能体版本',multi_agent_reasoning_effort:'多智能体推理等级',supported_in_api:'API 可用',supports_parallel_tool_calls:'并行工具调用',supports_reasoning_summaries:'推理摘要',prefer_websockets:'优先 WebSocket',minimal_client_version:'最低客户端版本',auto_compact_token_limit:'自动压缩上限',approvals:'审批说明',auto_review:'自动审核',collaboration_modes:'协作模式',confirmation_policies:'确认策略',guardian_v2:'Guardian',permissions:'权限',multi_agent:'多智能体',token_budget:'上下文预算',message:'提示文案'};
 let data = {models:[],removed:[]}, current = null, draft = null, viewMode = 'form', reviewSlug = '';
 function storedValue(name){
   let value = localStorage.getItem(name);
@@ -146,7 +148,9 @@ function upstreamAt(path){
   return value;
 }
 const primaryKeys = ['display_name','description','visibility','context_window','max_context_window','default_reasoning_level','priority','shell_type'];
-const flagKeys = ['support_verbosity','supported_in_api','supports_parallel_tool_calls','supports_search_tool','supports_reasoning_summaries','supports_image_detail_original','prefer_websockets','use_responses_lite','include_skills_usage_instructions'];
+const detailKeys = ['default_verbosity','default_reasoning_summary','default_service_tier','apply_patch_tool_type','web_search_tool_type','tool_mode','multi_agent_version','multi_agent_reasoning_effort','effective_context_window_percent','comp_hash','minimal_client_version','auto_compact_token_limit'];
+const flagKeys = ['support_verbosity','supported_in_api','supports_parallel_tool_calls','supports_search_tool','supports_reasoning_summaries','supports_image_detail_original','prefer_websockets','use_responses_lite','include_skills_usage_instructions','include_plugin_usage_instructions','include_apps_usage_instructions','supports_experimental_context','supports_reasoning_effort_updates','node_repl_auto_review_required','node_repl_disabled'];
+const knownSpeedTiers = ['fast','ultrafast'];
 function applyJson(){
   if (viewMode !== 'json') return true;
   const box = el('json');
@@ -194,7 +198,21 @@ function renderFields(){
   let anyFlag = false;
   for (const key of flagKeys) if (typeof draft[key] === 'boolean') { anyFlag = true; flags.append(flagField(key, patched)); }
   if (anyFlag) root.append(flags);
-  const used = new Set([...primaryKeys, ...flagKeys, 'input_modalities', 'supported_reasoning_levels', 'slug', 'base_instructions', 'model_messages']);
+  const detail = document.createElement('div');
+  detail.className = 'grid';
+  let anyDetail = false;
+  for (const key of detailKeys) {
+    if (!(key in draft)) continue;
+    const value = draft[key];
+    if (value != null && typeof value === 'object') continue;
+    anyDetail = true;
+    detail.append(scalarField([key], value, patched, false));
+  }
+  if (anyDetail) root.append(detail);
+  root.append(speedSection(patched));
+  if (draft.truncation_policy && typeof draft.truncation_policy === 'object' && !Array.isArray(draft.truncation_policy)) root.append(truncationField(patched));
+  if ('experimental_supported_tools' in draft) root.append(stringListField('experimental_supported_tools', patched));
+  const used = new Set([...primaryKeys, ...detailKeys, ...flagKeys, 'input_modalities', 'supported_reasoning_levels', 'additional_speed_tiers', 'service_tiers', 'slug', 'base_instructions', 'model_messages', 'truncation_policy', 'experimental_supported_tools']);
   const extra = document.createElement('details');
   extra.className = 'extra';
   extra.innerHTML = '<summary>其他字段</summary>';
@@ -202,9 +220,7 @@ function renderFields(){
   extraGrid.className = 'grid';
   for (const key of Object.keys(draft)) {
     if (used.has(key)) continue;
-    const value = draft[key];
-    if (value && typeof value === 'object') continue;
-    extraGrid.append(scalarField([key], value, patched, false));
+    extraGrid.append(valueField([key], draft[key], patched));
   }
   extra.append(extraGrid);
   root.append(extra);
@@ -214,8 +230,14 @@ function renderFields(){
   const textGrid = document.createElement('div');
   textGrid.className = 'grid';
   if ('base_instructions' in draft) textGrid.append(scalarField(['base_instructions'], draft.base_instructions, patched, true));
-  const template = draft.model_messages && draft.model_messages.instructions_template;
-  if (template != null) textGrid.append(scalarField(['model_messages','instructions_template'], template, patched, true));
+  const messages = draft.model_messages;
+  if (messages && typeof messages === 'object') {
+    if (messages.instructions_template != null) textGrid.append(scalarField(['model_messages','instructions_template'], messages.instructions_template, patched, true));
+    for (const key of Object.keys(messages)) {
+      if (key === 'instructions_template') continue;
+      textGrid.append(valueField(['model_messages', key], messages[key], patched));
+    }
+  }
   text.append(textGrid);
   root.append(text);
 }
@@ -232,6 +254,9 @@ function scalarField(path, value, patched, wide){
   } else if (value == null) {
     input = document.createElement('input'); input.type = 'text'; input.placeholder = '空'; input.value = '';
     input.onchange = () => setDraft(path, input.value === '' ? null : input.value);
+  } else if (typeof value === 'boolean') {
+    input = document.createElement('input'); input.type = 'checkbox'; input.checked = value;
+    input.onchange = () => setDraft(path, input.checked);
   } else if (typeof value === 'string' && value.length > 80) {
     input = document.createElement('textarea'); input.value = value;
     input.onchange = () => setDraft(path, input.value);
@@ -298,6 +323,143 @@ function reasoningField(){
   add.type = 'button'; add.textContent = '添加等级';
   add.onclick = () => { draft.supported_reasoning_levels.push({effort:'', description:''}); renderFields(); };
   wrap.append(add);
+  return wrap;
+}
+function sectionTitle(text){
+  const title = document.createElement('div');
+  title.className = 'section-title';
+  title.textContent = text;
+  return title;
+}
+function listValue(key){ return Array.isArray(draft[key]) ? draft[key] : []; }
+function speedSection(patched){
+  const wrap = document.createElement('div');
+  wrap.className = 'levels';
+  wrap.append(sectionTitle('额外速度档'));
+  const selected = new Set(listValue('additional_speed_tiers'));
+  const names = knownSpeedTiers.slice();
+  for (const name of selected) if (!names.includes(name)) names.push(name);
+  const flags = document.createElement('div');
+  flags.className = 'flags';
+  flags.style.padding = '0 0 8px';
+  for (const name of names) {
+    const labelEl = document.createElement('label');
+    labelEl.className = 'flag';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = selected.has(name);
+    input.onchange = () => {
+      const next = listValue('additional_speed_tiers').filter(item => item !== name);
+      if (input.checked) next.push(name);
+      draft.additional_speed_tiers = next;
+    };
+    labelEl.append(input, document.createTextNode(name));
+    flags.append(labelEl);
+  }
+  const custom = document.createElement('input');
+  custom.type = 'text';
+  custom.placeholder = '添加速度档 id';
+  custom.style.maxWidth = '220px';
+  const addSpeed = document.createElement('button');
+  addSpeed.type = 'button';
+  addSpeed.textContent = '添加';
+  addSpeed.onclick = () => {
+    const name = custom.value.trim();
+    if (!name) return;
+    const next = listValue('additional_speed_tiers').filter(item => item !== name);
+    next.push(name);
+    draft.additional_speed_tiers = next;
+    renderFields();
+  };
+  wrap.append(flags, custom, addSpeed);
+  markOverride(wrap, ['additional_speed_tiers'], patched);
+  wrap.append(sectionTitle('服务档'));
+  const tiers = Array.isArray(draft.service_tiers) ? draft.service_tiers : [];
+  tiers.forEach((tier, index) => {
+    if (!tier || typeof tier !== 'object') return;
+    const row = document.createElement('div');
+    row.className = 'tier';
+    const id = document.createElement('input');
+    id.type = 'text'; id.placeholder = 'id'; id.value = tier.id || '';
+    id.onchange = () => { draft.service_tiers[index].id = id.value; };
+    const name = document.createElement('input');
+    name.type = 'text'; name.placeholder = '名称'; name.value = tier.name || '';
+    name.onchange = () => { draft.service_tiers[index].name = name.value; };
+    const description = document.createElement('input');
+    description.type = 'text'; description.placeholder = '说明'; description.value = tier.description || '';
+    description.onchange = () => { draft.service_tiers[index].description = description.value; };
+    const remove = document.createElement('button');
+    remove.type = 'button'; remove.textContent = '删除';
+    remove.onclick = () => { draft.service_tiers.splice(index, 1); renderFields(); };
+    row.append(id, name, description, remove);
+    wrap.append(row);
+  });
+  const addTier = document.createElement('button');
+  addTier.type = 'button'; addTier.textContent = '添加服务档';
+  addTier.onclick = () => {
+    if (!Array.isArray(draft.service_tiers)) draft.service_tiers = [];
+    draft.service_tiers.push({id:'', name:'', description:''});
+    renderFields();
+  };
+  wrap.append(addTier);
+  markOverride(wrap, ['service_tiers'], patched);
+  return wrap;
+}
+function truncationField(patched){
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  const policy = draft.truncation_policy;
+  grid.append(scalarField(['truncation_policy','mode'], policy.mode, patched, false));
+  grid.append(scalarField(['truncation_policy','limit'], policy.limit, patched, false));
+  return grid;
+}
+function stringListField(key, patched){
+  const wrap = document.createElement('div');
+  wrap.className = 'levels';
+  wrap.append(sectionTitle(label([key])));
+  listValue(key).forEach((item, index) => {
+    const row = document.createElement('div');
+    row.className = 'level';
+    row.style.gridTemplateColumns = '1fr auto';
+    const input = document.createElement('input');
+    input.type = 'text'; input.value = String(item);
+    input.onchange = () => { draft[key][index] = input.value; };
+    const remove = document.createElement('button');
+    remove.type = 'button'; remove.textContent = '删除';
+    remove.onclick = () => { draft[key].splice(index, 1); renderFields(); };
+    row.append(input, remove);
+    wrap.append(row);
+  });
+  const add = document.createElement('button');
+  add.type = 'button'; add.textContent = '添加';
+  add.onclick = () => {
+    if (!Array.isArray(draft[key])) draft[key] = [];
+    draft[key].push('');
+    renderFields();
+  };
+  wrap.append(add);
+  markOverride(wrap, [key], patched);
+  return wrap;
+}
+function valueField(path, value, patched){
+  if (value && typeof value === 'object') return jsonField(path, value, patched);
+  return scalarField(path, value, patched, typeof value === 'string' && value.length > 80);
+}
+function jsonField(path, value, patched){
+  const wrap = document.createElement('div');
+  wrap.className = 'field wide';
+  const name = document.createElement('label');
+  name.textContent = label(path);
+  const input = document.createElement('textarea');
+  input.spellcheck = false;
+  input.style.minHeight = '96px';
+  input.value = JSON.stringify(value, null, 2);
+  input.onchange = () => {
+    try { setDraft(path, JSON.parse(input.value)); el('message').textContent = ''; }
+    catch (error) { el('message').textContent = label(path) + ' JSON 无法解析：' + error.message; }
+  };
+  wrap.append(name, input);
+  markOverride(wrap, path, patched);
   return wrap;
 }
 function markOverride(wrap, path, patched){
