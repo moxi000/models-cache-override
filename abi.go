@@ -43,7 +43,7 @@ import (
 	"unsafe"
 )
 
-const pluginVersion = "1.0.5"
+const pluginVersion = "1.0.6"
 
 var state runtimeState
 
