@@ -150,7 +150,10 @@ function upstreamAt(path){
 const primaryKeys = ['display_name','description','visibility','context_window','max_context_window','default_reasoning_level','priority','shell_type'];
 const detailKeys = ['default_verbosity','default_reasoning_summary','default_service_tier','apply_patch_tool_type','web_search_tool_type','tool_mode','multi_agent_version','multi_agent_reasoning_effort','effective_context_window_percent','comp_hash','minimal_client_version','auto_compact_token_limit'];
 const flagKeys = ['support_verbosity','supported_in_api','supports_parallel_tool_calls','supports_search_tool','supports_reasoning_summaries','supports_image_detail_original','prefer_websockets','use_responses_lite','include_skills_usage_instructions','include_plugin_usage_instructions','include_apps_usage_instructions','supports_experimental_context','supports_reasoning_effort_updates','node_repl_auto_review_required','node_repl_disabled'];
-const knownSpeedTiers = ['fast','ultrafast'];
+const speedPresets = [
+  {speed:'fast', tier:{id:'priority', name:'Fast', description:'2x speed, increased usage'}},
+  {speed:'ultrafast', tier:{id:'ultrafast', name:'Ultrafast', description:'The fastest available responses for latency-sensitive work.'}}
+];
 function applyJson(){
   if (viewMode !== 'json') return true;
   const box = el('json');
@@ -332,76 +335,45 @@ function sectionTitle(text){
   return title;
 }
 function listValue(key){ return Array.isArray(draft[key]) ? draft[key] : []; }
+function presetSelected(preset){
+  if (listValue('additional_speed_tiers').includes(preset.speed)) return true;
+  return (Array.isArray(draft.service_tiers) ? draft.service_tiers : []).some(tier => tier && tier.id === preset.tier.id);
+}
+function boundTier(preset, current){
+  const existing = current.find(tier => tier && tier.id === preset.tier.id && tier.name === preset.tier.name && typeof tier.description === 'string' && tier.description);
+  return {id: preset.tier.id, name: preset.tier.name, description: existing ? existing.description : preset.tier.description};
+}
+function applySpeedPresets(selected){
+  const current = Array.isArray(draft.service_tiers) ? draft.service_tiers.slice() : [];
+  const chosen = speedPresets.filter(preset => selected.includes(preset.speed));
+  draft.additional_speed_tiers = chosen.map(preset => preset.speed);
+  draft.service_tiers = chosen.map(preset => boundTier(preset, current));
+}
 function speedSection(patched){
   const wrap = document.createElement('div');
   wrap.className = 'levels';
-  wrap.append(sectionTitle('额外速度档'));
-  const selected = new Set(listValue('additional_speed_tiers'));
-  const names = knownSpeedTiers.slice();
-  for (const name of selected) if (!names.includes(name)) names.push(name);
-  const flags = document.createElement('div');
-  flags.className = 'flags';
-  flags.style.padding = '0 0 8px';
-  for (const name of names) {
-    const labelEl = document.createElement('label');
-    labelEl.className = 'flag';
+  wrap.append(sectionTitle('速度档'));
+  const selected = speedPresets.filter(presetSelected).map(preset => preset.speed);
+  for (const preset of speedPresets) {
+    const row = document.createElement('label');
+    row.className = 'flag';
+    row.style.margin = '0 8px 8px 0';
     const input = document.createElement('input');
     input.type = 'checkbox';
-    input.checked = selected.has(name);
+    input.checked = selected.includes(preset.speed);
     input.onchange = () => {
-      const next = listValue('additional_speed_tiers').filter(item => item !== name);
-      if (input.checked) next.push(name);
-      draft.additional_speed_tiers = next;
+      const next = speedPresets.filter(presetSelected).map(item => item.speed).filter(speed => speed !== preset.speed);
+      if (input.checked) next.push(preset.speed);
+      applySpeedPresets(speedPresets.map(item => item.speed).filter(speed => next.includes(speed)));
+      renderFields();
     };
-    labelEl.append(input, document.createTextNode(name));
-    flags.append(labelEl);
-  }
-  const custom = document.createElement('input');
-  custom.type = 'text';
-  custom.placeholder = '添加速度档 id';
-  custom.style.maxWidth = '220px';
-  const addSpeed = document.createElement('button');
-  addSpeed.type = 'button';
-  addSpeed.textContent = '添加';
-  addSpeed.onclick = () => {
-    const name = custom.value.trim();
-    if (!name) return;
-    const next = listValue('additional_speed_tiers').filter(item => item !== name);
-    next.push(name);
-    draft.additional_speed_tiers = next;
-    renderFields();
-  };
-  wrap.append(flags, custom, addSpeed);
-  markOverride(wrap, ['additional_speed_tiers'], patched);
-  wrap.append(sectionTitle('服务档'));
-  const tiers = Array.isArray(draft.service_tiers) ? draft.service_tiers : [];
-  tiers.forEach((tier, index) => {
-    if (!tier || typeof tier !== 'object') return;
-    const row = document.createElement('div');
-    row.className = 'tier';
-    const id = document.createElement('input');
-    id.type = 'text'; id.placeholder = 'id'; id.value = tier.id || '';
-    id.onchange = () => { draft.service_tiers[index].id = id.value; };
-    const name = document.createElement('input');
-    name.type = 'text'; name.placeholder = '名称'; name.value = tier.name || '';
-    name.onchange = () => { draft.service_tiers[index].name = name.value; };
-    const description = document.createElement('input');
-    description.type = 'text'; description.placeholder = '说明'; description.value = tier.description || '';
-    description.onchange = () => { draft.service_tiers[index].description = description.value; };
-    const remove = document.createElement('button');
-    remove.type = 'button'; remove.textContent = '删除';
-    remove.onclick = () => { draft.service_tiers.splice(index, 1); renderFields(); };
-    row.append(id, name, description, remove);
+    const text = document.createElement('span');
+    const tier = boundTier(preset, Array.isArray(draft.service_tiers) ? draft.service_tiers : []);
+    text.textContent = preset.speed + ' · 服务档 ' + tier.id + ' / ' + tier.name + ' / ' + tier.description;
+    row.append(input, text);
     wrap.append(row);
-  });
-  const addTier = document.createElement('button');
-  addTier.type = 'button'; addTier.textContent = '添加服务档';
-  addTier.onclick = () => {
-    if (!Array.isArray(draft.service_tiers)) draft.service_tiers = [];
-    draft.service_tiers.push({id:'', name:'', description:''});
-    renderFields();
-  };
-  wrap.append(addTier);
+  }
+  markOverride(wrap, ['additional_speed_tiers'], patched);
   markOverride(wrap, ['service_tiers'], patched);
   return wrap;
 }

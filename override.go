@@ -176,15 +176,18 @@ func applyOne(base *orderedObject, catalogSlug string, ov *compiledOverride) jso
 	} else {
 		result = mergeObjects(base, ov.body)
 	}
-	if stringField(result, "slug") == "" && catalogSlug != "" {
-		raw, errMarshal := json.Marshal(catalogSlug)
-		if errMarshal == nil {
-			result.set("slug", raw)
-		}
+	// The patch slug only selects the model. A provider-prefixed catalog entry
+	// such as devin/gpt-6-astra must keep that slug, or the client sees duplicates.
+	if catalogSlug != "" {
+		result.set("slug", rawJSONString(catalogSlug))
 	}
 	for _, path := range ov.delete {
+		if catalogRequiredPath(path) {
+			continue
+		}
 		deletePath(result, path)
 	}
+	keepCatalogRequired(result, base)
 	return result.marshal()
 }
 

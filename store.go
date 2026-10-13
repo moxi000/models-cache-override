@@ -513,9 +513,9 @@ func diffInto(patch *orderedObject, deletes []string, prefix string, base, edite
 		if _, ok := edited.get(key); ok {
 			continue
 		}
-		path := key
-		if prefix != "" {
-			path = prefix + "." + key
+		path := pathKey(prefix, key)
+		if catalogRequiredPath(path) {
+			continue
 		}
 		deletes = append(deletes, path)
 	}
@@ -617,6 +617,7 @@ func (s *runtimeState) editModel(action, slug string, model json.RawMessage) err
 			return fmt.Errorf("模型需要 slug")
 		}
 		slug = stringField(obj, "slug")
+		bindSpeedTiers(obj)
 		base, _ := s.deliveryBase()
 		baseModels, _ := parseModelDocument(base)
 		upstream := indexModels(baseModels)[slug]
